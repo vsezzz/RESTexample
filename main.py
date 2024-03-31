@@ -4,50 +4,53 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from tkinter import *
 from tkinter import messagebox
+from tkinter import ttk
 import numpy as np
 
 
-def IndexPlot():
+def indexplot():
     try:
-        tiker = str(ETiker.get())
-        shares = requests.get(f'http://iss.moex.com/iss/engines/stock/markets/shares/securities/{tiker}.json').json()
-        if shares['securities']['data'] == []:
+        tiker = str(ChooseTiker.get())
+
+        mark = str(ChooseMarket.get())
+        market = name[title.index(mark)]
+        shares = requests.get(f'http://iss.moex.com/iss/engines/stock/markets/{market}/securities/{tiker}.json').json()
+
+        if not shares['securities']['data'] or tiker == '':
             messagebox.showwarning('Ошибка!', f'Несуществующий тикер {tiker}!')
             return 0
 
-        if int(EStartDay.get()) > 31 or int(EStartDay.get()) < 1:
-            messagebox.showwarning('Ошибка!', 'Начальный день не может быть больше значения 31 или отрицательным!')
+        e_start_info = EStart.get().split('.')
+        e_end_info = EEnd.get().split('.')
+        if len(e_start_info) != 3 or len(e_end_info) != 3:
+            messagebox.showwarning('Ошибка!', 'Введите дату в формате дд.мм.гггг')
             return 0
-        else: start_day = int(EStartDay.get())
 
-        if int(EStartMonth.get()) > 12 or int(EStartMonth.get()) < 1:
-            messagebox.showwarning('Ошибка!', 'Начальный месяц не может быть больше значения 12 или отрицательным!')
+        if int(e_start_info[0]) > 31 or int(e_start_info[0]) < 1 or int(e_end_info[0]) > 31 or int(e_end_info[0]) < 1:
+            messagebox.showwarning('Ошибка!', 'День не может превышать значение 31 или быть отрицательным!')
             return 0
-        else:  start_month = int(EStartMonth.get())
+        else:
+            start_day = int(e_start_info[0])
+            end_day = int(e_end_info[0])
 
-        if int(EStartYear.get()) > int(EEndYear.get()):
+        if int(e_start_info[1]) > 12 or int(e_start_info[1]) < 1 or int(e_end_info[1]) > 12 or int(e_end_info[1]) < 1:
+            messagebox.showwarning('Ошибка!', 'Месяц не может превышать значения 12 или быть отрицательным!')
+            return 0
+        else:
+            start_month = int(e_start_info[1])
+            end_month = int(e_end_info[1])
+
+        if int(e_start_info[2]) > int(e_end_info[2]):
             messagebox.showwarning('Ошибка!', 'Начальный год не может быть больше конечного года!')
             return 0
         else:
-            start_year = int(EStartYear.get())
-            end_year = int(EEndYear.get())
+            start_year = int(e_start_info[2])
+            end_year = int(e_end_info[2])
 
-        if int(EEndMonth.get()) > 12 or int(EEndMonth.get()) < 1:
-            messagebox.showwarning('Ошибка!', 'Конечный месяц не может быть больше значения 12 или отрицательным!')
-            return 0
-        else: end_month = int(EEndMonth.get())
+        shares = requests.get(f'http://iss.moex.com/iss/engines/stock/markets/{market}/securities/{tiker}/candles.json'
+                              f'?from={start_year}-{start_month}-{start_day}'
+                              f'&till={end_year}-{end_month}-{end_day}&interval=24').json()
 
-        if int(EEndDay.get()) > 31 or int(EEndDay.get()) < 1:
-            messagebox.showwarning('Ошибка!', 'Конечный день не может быть больше значения 31 или отрицательным!')
-            return 0
-        else: end_day = int(EEndDay.get())
-
-        if end_year - start_year > 4:
-            messagebox.showwarning('Ошибка!', 'Невозможно вывести результат, если разница в годах больше 3!')
-            return 0
-
-        shares = requests.get(f'http://iss.moex.com/iss/engines/stock/markets/shares/securities/{tiker}/candles.json'
-                              f'?from={start_year}-{start_month}-{start_day}&till={end_year}-{end_month}-{end_day}&interval=24').json()
         if shares['candles']['data'] == [] or len(shares['candles']['data']) == 1:
             messagebox.showwarning('Ошибка!', f'Нет данных. Неверно выбрана дата.')
             return 0
@@ -62,17 +65,22 @@ def IndexPlot():
             money.append(colum[1])
 
         if end_day < 10:
-            end_day = '0'+str(end_day)
+            end_day = '0' + str(end_day)
         if end_month < 10:
-            end_month = '0'+str(end_month)
+            end_month = '0' + str(end_month)
         enddate = np.datetime64(f'{end_year}-{end_month}-{end_day}')
 
-        if start_day < 10:
-            start_day = '0'+str(start_day)
-        if start_month < 10:
-            start_month = '0'+str(start_month)
+        while date[-1] != enddate:
+            date_upd = requests.get(
+                f'http://iss.moex.com/iss/engines/stock/markets/{market}/securities/{tiker}/candles.json'
+                f'?from={date[-1] + 1}&till={enddate}&interval=24').json()
+            if not date_upd['candles']['data']:
+                break
+            for colum in date_upd['candles']['data']:
+                date.append(np.datetime64(colum[6][0:10]))
+                money.append(colum[1])
 
-        if len(date) == 500 or today == enddate:
+        if today == enddate or date[-1] < enddate:
             messagebox.showwarning('Внимание!',
                                    f'Возможно, выведен результат не за весь выбранный период! '
                                    f'\nОтображен период с {date[0]} до {date[-1]}')
@@ -97,45 +105,65 @@ def IndexPlot():
         messagebox.showwarning('Ошибка!', 'Значения в ячейках ввода дат должны быть целочисленными!')
 
 
+def callback(eventObject):
+    tik = ChooseMarket.get()
+    nam = name[title.index(tik)]
+    rolling_tiker = requests.get(f'http://iss.moex.com/iss/engines/stock/markets/{nam}/securities.json?iss.meta=off'
+                                 f'&iss.only=securities&securities.columns=SECID').json()
+    combo_data_tiker = []
+    for l in range(len(rolling_tiker['securities']['data'])):
+        combo_data_tiker.append(rolling_tiker['securities']['data'][l])
+    combo_data_tiker = tuple(combo_data_tiker)
+    ChooseTiker.config(values=combo_data_tiker)
+
+
 root = Tk()
 root.title("Графики")
-root.geometry("300x100")
+root.geometry("530x130")
 root.resizable(False, False)
 
 frame = Frame(root, padx=10, pady=10)
 frame.pack()
 
-LIndex = Label(frame, text="Введите тикер")
-LIndex.grid(column=0, row=0)
+LMarket = Label(frame, text="Выберите рынок")
+LMarket.grid(column=0, row=0)
 
-ETiker = Entry(frame, width=16)
-ETiker.grid(column=1, row=0, columnspan=10)
+LIndex = Label(frame, text="Введите или выберите тикер")
+LIndex.grid(column=0, row=1)
 
-LStart = Label(frame, text="Введите дату начала торгов")
-LStart.grid(column=0, row=1)
+name_req = requests.get(f'http://iss.moex.com/iss/engines/stock/markets.json'
+                        f'?iss.meta=off&iss.only=markets&markets.columns=NAME').json()
+title_req = requests.get(f'http://iss.moex.com/iss/engines/stock/markets.json'
+                         f'?iss.meta=off&iss.only=markets&markets.columns=title').json()
+name = []
+title = []
+for i in range(len(name_req['markets']['data'])):
+    name.append(name_req['markets']['data'][i])
+    title.append(title_req['markets']['data'][i])
+name = sum(name, [])
+title = sum(title, [])
 
-EStartDay = Entry(frame, width=5)
-EStartDay.grid(column=1, row=1)
+title_var = StringVar(value=title[1])
+ChooseMarket = ttk.Combobox(frame, textvariable=title_var, values=title, state="readonly")
+ChooseMarket.grid(column=1, row=0)
 
-EStartMonth = Entry(frame, width=5)
-EStartMonth.grid(column=2, row=1)
+ChooseTiker = ttk.Combobox(frame, width=37)
+ChooseTiker.grid(row=1, column=1)
+ChooseTiker.bind('<ButtonPress>', callback)
 
-EStartYear = Entry(frame, width=5)
-EStartYear.grid(column=3, row=1)
+LStart = Label(frame, text="Введите дату начала торгов (дд.мм.гггг)")
+LStart.grid(column=0, row=2)
 
-LEnd = Label(frame, text="Введите дату окончания торгов")
-LEnd.grid(column=0, row=2)
+EStart = Entry(frame, width=16)
+EStart.grid(column=1, row=2)
 
-EEndDay = Entry(frame, width=5)
-EEndDay.grid(column=1, row=2)
+LEnd = Label(frame, text="Введите дату окончания торгов (дд.мм.гггг)")
+LEnd.grid(column=0, row=3)
 
-EEndMonth = Entry(frame, width=5)
-EEndMonth.grid(column=2, row=2)
+EEnd = Entry(frame, width=16)
+EEnd.grid(column=1, row=3)
 
-EEndYear = Entry(frame, width=5)
-EEndYear.grid(column=3, row=2)
-
-BImage = Button(frame, text="Изобразить график", command=IndexPlot)
-BImage.grid(column=0, row=3)
+BImage = Button(frame, text="Изобразить график", command=indexplot)
+BImage.grid(column=0, row=4)
 
 root.mainloop()
